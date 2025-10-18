@@ -1,21 +1,29 @@
 import express from "express";
-import mongoose from "mongoose";
+import connectDB from "./db.js";
 import cors from "cors";
 import dotenv from "dotenv";
+import userRoutes from "./routes/userRoutes.js";
+
 
 dotenv.config();
+
 const app = express();
-app.use(cors());
+app.use(cors(
+  {
+  origin: "http://localhost:5173", // or whatever your React dev server runs on
+  credentials: true
+}
+));
 app.use(express.json());
 
-// MongoDB connect
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error(err));
+// db connection
+connectDB();
 
-// Routes
-import userRoutes from "./routes/userRoutes.js";
+// routes
 app.use("/api/users", userRoutes);
 
-const PORT = process.env.PORT || 5000;
+// server initialization
+let PORT = process.env.PORT;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+

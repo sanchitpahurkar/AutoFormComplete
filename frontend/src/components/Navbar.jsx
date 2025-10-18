@@ -47,7 +47,7 @@ export default function NavBar() {
 
         <div className="nav-links bg-[#E4E0E1] sm:bg-[#D6C0B3]" role="navigation" aria-label="Main navigation">
           <a className="nav-link" href="/">Home</a>
-          <a className="nav-link" href="/form">Form-fill</a>
+          <a className="nav-link" href="/auto-fill">Form-fill</a>
           <div className="actions flex-col md:flex-row">
             <a className="nav-link" href="/login">Login</a>
             <a className="btn-login" href="/signup">Sign up</a>
