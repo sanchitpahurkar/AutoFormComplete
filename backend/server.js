@@ -3,6 +3,7 @@ import connectDB from "./db.js";
 import cors from "cors";
 import dotenv from "dotenv";
 import userRoutes from "./routes/userRoutes.js";
+import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
 
 
 dotenv.config();
@@ -20,7 +21,7 @@ app.use(express.json());
 connectDB();
 
 // routes
-app.use("/api/users", userRoutes);
+app.use("/api/users", ClerkExpressRequireAuth(), userRoutes);
 
 // server initialization
 let PORT = process.env.PORT;
