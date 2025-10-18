@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { useAuth } from "@clerk/clerk-react";
+import toast from "react-hot-toast";
 
 export default function UserForm() {
+
+  const { getToken } = useAuth();
 
   // default state of the form
   const defaultFormState = {
@@ -97,6 +101,8 @@ export default function UserForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const token = await getToken();
+
     const rknecErr =
       form.rknecEmail && !isValidEmail(form.rknecEmail)
         ? "Invalid email format"
@@ -115,14 +121,17 @@ export default function UserForm() {
     setSubmitting(true);
     try {
       const res = await axios.post("http://localhost:5000/api/users", form, {
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`, 
+          "Content-Type": "application/json" 
+        },
       });
       console.log(res.data);
-      alert("User saved successfully!"); 
+      toast.success("User saved successfully!");
       setForm(defaultFormState);
     } catch (err) {
       console.error(err);
-      alert("Failed to save user.");
+      toast.error("Failed to save user.");
     } finally {
       setSubmitting(false);
     }
@@ -429,7 +438,7 @@ export default function UserForm() {
                 >
                   <input
                     type="checkbox"
-                    checked={form.sameAsCurrent}
+                    checked={form.sameAsCurrent || ""}
                     onChange={handleCheckbox}
                   />
                   Same as current
@@ -463,7 +472,7 @@ export default function UserForm() {
               </label>
               <input
                 name="year"
-                value={form.currentDegree.year}
+                value={form.currentDegree.year }
                 onChange={handleNestedChange("currentDegree")}
                 placeholder="Eg: I, II, III, IV"
                 className="underline-input"
@@ -502,7 +511,7 @@ export default function UserForm() {
               </label>
               <input
                 name="enrollmentNo"
-                value={form.currentDegree.enrollmentNo}
+                value={form.currentDegree.enrollmentNo || ""}
                 onChange={handleNestedChange("currentDegree")}
                 placeholder="Enrollment No"
                 className="underline-input"
@@ -517,7 +526,7 @@ export default function UserForm() {
               </label>
               <input
                 name="cgpa"
-                value={form.currentDegree.cgpa}
+                value={form.currentDegree.cgpa || ""}
                 onChange={handleNestedChange("currentDegree")}
                 placeholder="CGPA"
                 className="underline-input"
@@ -531,7 +540,7 @@ export default function UserForm() {
               </label>
               <input
                 name="activeBacklogs"
-                value={form.currentDegree.activeBacklogs}
+                value={form.currentDegree.activeBacklogs || ""}
                 onChange={handleNestedChange("currentDegree")}
                 placeholder="Active Backlogs"
                 className="underline-input"
@@ -545,7 +554,7 @@ export default function UserForm() {
               </label>
               <input
                 name="deadBacklogs"
-                value={form.currentDegree.deadBacklogs}
+                value={form.currentDegree.deadBacklogs || ""}
                 onChange={handleNestedChange("currentDegree")}
                 placeholder="Dead Backlogs"
                 className="underline-input"
@@ -561,7 +570,7 @@ export default function UserForm() {
               </label>
               <select
                 name="graduationYear"
-                value={form.currentDegree.graduationYear}
+                value={form.currentDegree.graduationYear || ""}
                 onChange={handleNestedChange("currentDegree")}
                 className="underline-select"
                 style={{ appearance: "none" }}
@@ -627,7 +636,7 @@ export default function UserForm() {
               <div style={{ display: "flex", gap: 10 }}>
                 <select
                   name="passingYear"
-                  value={form.twelfth.passingYear}
+                  value={form.twelfth.passingYear || ""}
                   onChange={handleNestedChange("twelfth")}
                   className="underline-select"
                   style={{ appearance: "none" }}
@@ -641,7 +650,7 @@ export default function UserForm() {
                 </select>
                 <input
                   name="percentage"
-                  value={form.twelfth.percentage}
+                  value={form.twelfth.percentage || ""}
                   onChange={handleNestedChange("twelfth")}
                   placeholder="Percentage"
                   className="underline-input"
@@ -701,7 +710,7 @@ export default function UserForm() {
               <div style={{ display: "flex", gap: 10 }}>
                 <select
                   name="passingYear"
-                  value={form.tenth.passingYear}
+                  value={form.tenth.passingYear || ""}
                   onChange={handleNestedChange("tenth")}
                   className="underline-select"
                   style={{ appearance: "none" }}
@@ -715,7 +724,7 @@ export default function UserForm() {
                 </select>
                 <input
                   name="percentage"
-                  value={form.tenth.percentage}
+                  value={form.tenth.percentage || ""}
                   onChange={handleNestedChange("tenth")}
                   placeholder="Percentage"
                   className="underline-input"

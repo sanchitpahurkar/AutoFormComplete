@@ -8,6 +8,8 @@ export const createUser = async (req, res) => {
         // DOB string to Date
         const dateOfBirth = formData.dob ? new Date(formData.dob) : null;
 
+        const clerkId = req.auth.userId;
+
         const newUser = new User({
             firstName: formData.firstName,
             middleName: formData.middleName,
@@ -36,6 +38,7 @@ export const createUser = async (req, res) => {
             sscYearOfPassing: formData.tenth.passingYear,
             sscPercentage: formData.tenth.percentage,
             resume: formData.resumeLink,
+            clerkId
         });
 
         await newUser.save();
