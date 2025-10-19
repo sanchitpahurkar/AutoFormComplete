@@ -49,6 +49,71 @@ export default function UserForm() {
   const [form, setForm] = useState(defaultFormState);
   const [errors, setErrors] = useState({ rknecEmail: "", personalEmail: "" });
   const [submitting, setSubmitting] = useState(false);
+  
+  // data isolation states
+  const [existingUser, setExistingUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // helper: map backend user data to frontend form structure
+  const mapUserToForm = (user) => ({
+    firstName: user.firstName || "",
+    middleName: user.middleName || "",
+    lastName: user.lastName || "",
+    dob: user.dob ? new Date(user.dob).toISOString().substring(0, 10) : "",
+    gender: user.gender || "",
+    phone: user.phone || "",
+    rknecEmail: user.rknecID || "",
+    personalEmail: user.emailID || "",
+    alternatePhone: user.alternatePhone || "",
+    currentAddress: user.currentAddress || "",
+    permanentAddress: user.permanentAddress || "",
+    sameAsCurrent: false,
+    currentDegree: {
+      year: user.collegeYear || "",
+      branch: user.branch || "",
+      enrollmentNo: user.enrollmentNumber || "",
+      cgpa: user.cgpa || "",
+      activeBacklogs: user.activeBacklogs || "",
+      deadBacklogs: user.deadBacklogs || "",
+      graduationYear: user.yearOfGraduation || "",
+    },
+    twelfth: {
+      schoolName: user.hscSchoolName || "",
+      board: user.hscBoard || "",
+      passingYear: user.hscYearOfPassing || "",
+      percentage: user.hscPercentage || "",
+    },
+    tenth: {
+      schoolName: user.sscSchoolName || "",
+      board: user.sscBoard || "",
+      passingYear: user.sscYearOfPassing || "",
+      percentage: user.sscPercentage || "",
+    },
+    resumeLink: user.resume || "",
+  });
+
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = await getToken();
+      try {
+        const res = await axios.get("http://localhost:5000/api/users/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if(res.data.success) {
+          const mapped = mapUserToForm(res.data.user);
+          setForm(mapped)
+          setExistingUser(true);
+        }
+      } catch (error) {
+        console.log("No existing form found (new user).");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchUser();
+  }, []);
+
 
   // handles the graduation year selection logic
   // generate year options (descending) for year-only pickers
@@ -97,6 +162,38 @@ export default function UserForm() {
   };
 
 
+  // function for mapping consistency
+  const mapFormToUser = (form) => ({
+    firstName: form.firstName,
+    middleName: form.middleName,
+    lastName: form.lastName,
+    dob: form.dob,
+    gender: form.gender,
+    phone: form.phone,
+    rknecID: form.rknecEmail,
+    emailID: form.personalEmail,
+    alternatePhone: form.alternatePhone,
+    currentAddress: form.currentAddress,
+    permanentAddress: form.permanentAddress,
+    collegeYear: form.currentDegree.year,
+    branch: form.currentDegree.branch,
+    enrollmentNumber: form.currentDegree.enrollmentNo,
+    cgpa: form.currentDegree.cgpa,
+    activeBacklogs: form.currentDegree.activeBacklogs,
+    deadBacklogs: form.currentDegree.deadBacklogs,
+    yearOfGraduation: form.currentDegree.graduationYear,
+    hscSchoolName: form.twelfth.schoolName,
+    hscBoard: form.twelfth.board,
+    hscYearOfPassing: form.twelfth.passingYear,
+    hscPercentage: form.twelfth.percentage,
+    sscSchoolName: form.tenth.schoolName,
+    sscBoard: form.tenth.board,
+    sscYearOfPassing: form.tenth.passingYear,
+    sscPercentage: form.tenth.percentage,
+    resume: form.resumeLink,
+  });
+
+
   // submit trigger
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -118,17 +215,29 @@ export default function UserForm() {
       return;
     }
 
+    const userPayload = mapFormToUser(form);
+    console.log("Submitting payload : ", userPayload);
+    
+
     setSubmitting(true);
     try {
-      const res = await axios.post("http://localhost:5000/api/users", form, {
-        headers: {
-          Authorization: `Bearer ${token}`, 
-          "Content-Type": "application/json" 
-        },
-      });
+
+      let res;
+      if(existingUser) {
+        res = await axios.put("http://localhost:5000/api/users/me", userPayload, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast.success("Details updated successfully");
+      } else {
+        // new submission flow
+        res = await axios.post("http://localhost:5000/api/users", userPayload, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast.success("Details submitted successfully");
+      }
+      setExistingUser(true);
+
       console.log(res.data);
-      toast.success("User saved successfully!");
-      setForm(defaultFormState);
     } catch (err) {
       console.error(err);
       toast.error("Failed to save user.");
@@ -770,7 +879,7 @@ export default function UserForm() {
           }}
         >
           <button type="submit" disabled={submitting} className="btn-primary">
-            {submitting ? "Saving..." : "Save Student"}
+            {submitting ? "Saving..." : "Save"}
           </button>
         </div>
       </form>

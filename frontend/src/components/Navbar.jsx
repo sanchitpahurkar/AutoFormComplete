@@ -60,7 +60,7 @@ export default function NavBar() {
           )
           }
           <div className="flex flex-col justify-between gap-x-2 items-center">
-            <UserButton afterSignOutUrl="/sign-in" />
+            <UserButton afterSignOutUrl="/login" />
             <p className="text-sm">{user ?.firstName }</p>
           </div>
         </div>
