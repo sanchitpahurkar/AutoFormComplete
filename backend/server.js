@@ -1,21 +1,39 @@
 import express from "express";
-import mongoose from "mongoose";
+import connectDB from "./db.js"; 
 import cors from "cors";
 import dotenv from "dotenv";
+import userRoutes from "./routes/userRoutes.js";
+import autofillRoutes from "./routes/autofillRoutes.js"; // <-- NEW IMPORT: Autofill Routes
+import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
+
 
 dotenv.config();
+
 const app = express();
-app.use(cors());
+app.use(cors(
+    {
+        origin: "http://localhost:5173", // React frontend running on 5173
+        credentials: true
+    }
+));
 app.use(express.json());
 
-// MongoDB connect
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error(err));
+// DB Connection
+connectDB();
 
 // Routes
-import userRoutes from "./routes/userRoutes.js";
-app.use("/api/users", userRoutes);
+// 1. User routes require Clerk Authentication
+app.use("/api/users", ClerkExpressRequireAuth(), userRoutes);
 
-const PORT = process.env.PORT || 5000;
+// 2. Autofill routes (API root) - Clerk authentication is NOT applied here, 
+//    as we handle auth logic within the controller using data from the frontend body.
+app.use("/api", autofillRoutes); // <-- NEW LINE: Registers the /api/autofill route
+
+// Simple health check route
+app.get('/', (req, res) => {
+    res.send('AutoFormComplete Backend API is Running');
+});
+
+// Server Initialization
+let PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

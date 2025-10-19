@@ -1,10 +1,14 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { useUser, UserButton } from '@clerk/clerk-react';
 
 export default function NavBar() {
   const BG = "#D6C0B3";
   const TEXT = "#493628";
 
   const [open, setOpen] = useState(false);
+
+  const { user } = useUser();
+
 
   return (
     <nav style={{ background: BG, color: TEXT }} className="navbar">
@@ -47,10 +51,17 @@ export default function NavBar() {
 
         <div className="nav-links bg-[#E4E0E1] sm:bg-[#D6C0B3]" role="navigation" aria-label="Main navigation">
           <a className="nav-link" href="/">Home</a>
-          <a className="nav-link" href="/form">Form-fill</a>
-          <div className="actions flex-col md:flex-row">
-            <a className="nav-link" href="/login">Login</a>
-            <a className="btn-login" href="/signup">Sign up</a>
+          <a className="nav-link" href="/auto-fill">Form-fill</a>
+          { user ? <></> : (
+            <div className="actions flex-col md:flex-row">
+              <a className="nav-link" href="/login">Login</a>
+              <a className="btn-login" href="/signup">Sign up</a>
+            </div>
+          )
+          }
+          <div className="flex flex-col justify-between gap-x-2 items-center">
+            <UserButton afterSignOutUrl="/login" />
+            <p className="text-sm">{user ?.firstName }</p>
           </div>
         </div>
       </div>
