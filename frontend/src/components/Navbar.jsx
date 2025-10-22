@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useUser, UserButton } from '@clerk/clerk-react';
 
 export default function NavBar() {
-  const BG = "#D6C0B3";
-  const TEXT = "#493628";
+  const BG = "#ffffff";
+  const TEXT = "#7b3306";
 
   const [open, setOpen] = useState(false);
 
@@ -11,7 +11,7 @@ export default function NavBar() {
 
 
   return (
-    <nav style={{ background: BG, color: TEXT }} className="navbar">
+    <nav style={{ background: BG, color: TEXT }} className="navbar work-sans">
       <style>{`
         .navbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); position:sticky; top:0; z-index:40; }
         .brand{ display:flex; align-items:center; gap:12px; text-decoration:none; color:inherit; }
@@ -49,10 +49,14 @@ export default function NavBar() {
           </svg>
         </button>
 
-        <div className="nav-links bg-[#E4E0E1] sm:bg-[#D6C0B3]" role="navigation" aria-label="Main navigation">
+        <div className="nav-links " role="navigation" aria-label="Main navigation">
           <a className="nav-link" href="/">Home</a>
-          <a className="nav-link" href="/auto-fill">Form-fill</a>
-          { user ? <></> : (
+          
+          { user ? 
+          <>
+            <a className="nav-link" href="/auto-fill">Form-fill</a>
+            <a className="nav-link" href="/parent-form">Parent Form</a>
+          </> : (
             <div className="actions flex-col md:flex-row">
               <a className="nav-link" href="/login">Login</a>
               <a className="btn-login" href="/signup">Sign up</a>

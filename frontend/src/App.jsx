@@ -21,7 +21,7 @@ function App() {
         <Toaster position="top-right" reverseOrder={false} />
         <Routes>
           {/* auth routes */}
-          <Route path='/login' element={<div className='flex justify-center items-center min-h-screen bg-[#493628]'>
+          <Route path='/login' element={<div className='flex justify-center items-center min-h-screen bg-custom-grad'>
             <SignIn 
               routing="path" 
               path="/login" 
@@ -29,7 +29,7 @@ function App() {
             />
           </div>} 
           />
-          <Route path='/signup' element={<div className='flex justify-center items-center min-h-screen bg-[#493628]'>
+          <Route path='/signup' element={<div className='flex justify-center items-center min-h-screen bg-custom-grad'>
             <SignUp 
               routing="path"
               path="/signup" 
@@ -38,13 +38,9 @@ function App() {
           </div>} 
           />
 
-          {/* protected routes */}
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          } />
+          <Route path='/' element={<Home />}/>
 
+          {/* protected routes */}
           <Route path="/auto-fill" element={
             <ProtectedRoute>
               <AutoFill />
@@ -56,6 +52,7 @@ function App() {
               <UserForm />
             </ProtectedRoute>
           } />
+
         </Routes>
       </>
   )
