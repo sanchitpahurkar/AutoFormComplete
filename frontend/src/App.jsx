@@ -21,8 +21,22 @@ function App() {
         <Toaster position="top-right" reverseOrder={false} />
         <Routes>
           {/* auth routes */}
-          <Route path="/login" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
+          <Route path='/login' element={<div className='flex justify-center items-center min-h-screen bg-[#493628]'>
+            <SignIn 
+              routing="path" 
+              path="/login" 
+              signUpUrl="/signup"
+            />
+          </div>} 
+          />
+          <Route path='/signup' element={<div className='flex justify-center items-center min-h-screen bg-[#493628]'>
+            <SignUp 
+              routing="path"
+              path="/signup" 
+              signInUrl="/login"
+            />
+          </div>} 
+          />
 
           {/* protected routes */}
           <Route path="/" element={
