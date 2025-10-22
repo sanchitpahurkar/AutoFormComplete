@@ -1,1 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=BBH+Sans+Bogle&family=Bitcount+Grid+Single:wght@100..900&family=Work+Sans:ital@0;1&family=Zilla+Slab+Highlight:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bitcount+Grid+Single:wght@100..900&family=Work+Sans:ital@0;1&family=Zilla+Slab+Highlight:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap');
 @import "tailwindcss";
+
+.work-sans {
+  font-family: "Work Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.zilla-slab-highlight-regular {
+  font-family: "Zilla Slab Highlight", serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.zilla-slab-highlight-bold {
+  font-family: "Zilla Slab Highlight", serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.bbh-sans-bogle-regular {
+  font-family: "BBH Sans Bogle", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+
+@layer utilities {
+  .bg-custom-radgrad {
+     background-color: #6b240c;
+     background-image: radial-gradient(at 56% 38%, #6b240c 0%, transparent 60%), radial-gradient(at 88% 34%, #994d1c 0%, transparent 50%), radial-gradient(at 42% 22%, #e48f45 0%, transparent 40%), radial-gradient(at 67% 46%, #f5cca0 0%, transparent 30%);
+  }
+}
+
+
+@layer utilities {
+  .bg-custom-grad {
+     background: radial-gradient(
+       ellipse at top right,
+       #1c0a00,
+       #361500,
+       #603601    
+     );
+  }
+}

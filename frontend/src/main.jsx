@@ -5,6 +5,7 @@ import App from './App.jsx'
 import NavBar from './components/Navbar.jsx'
 import { BrowserRouter } from 'react-router-dom';
 import { ClerkProvider } from "@clerk/clerk-react"
+import Footer from './components/Footer.jsx'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -17,7 +18,8 @@ createRoot(document.getElementById('root')).render(
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
       <BrowserRouter>
         <NavBar/>
-        <App />
+        <div className='work-sans' ><App /></div>
+        <Footer />
       </BrowserRouter>
     </ClerkProvider>
   </StrictMode>,
