@@ -1,17 +1,36 @@
 // frontend/src/pages/UserProfile.jsx
-
-import React, { useState } from 'react';
-import { saveUserProfile } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import useApi from '../services/api';
+import { useUser } from '@clerk/clerk-react';
 
 const UserProfile = () => {
+  const api = useApi();
+  const { isLoaded, isSignedIn } = useUser();
+
   const [formData, setFormData] = useState({
-    email: 'user@example.com', // Dummy email for initial testing
     firstName: '',
     lastName: '',
+    emailID: '',
+    phone: '',
     cgpa: '',
-    // Add more fields here to match your MongoDB schema
   });
   const [message, setMessage] = useState('');
+  const [isExisting, setIsExisting] = useState(false);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    (async () => {
+      try {
+        const { data } = await api.getUserProfile();
+        if (data.user) {
+          setFormData(data.user);
+          setIsExisting(true);
+        }
+      } catch (err) {
+        console.log('No existing profile found.');
+      }
+    })();
+  }, [isLoaded, isSignedIn]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -22,40 +41,34 @@ const UserProfile = () => {
     e.preventDefault();
     setMessage('Saving...');
     try {
-      const response = await saveUserProfile(formData);
-      setMessage('Profile saved successfully! 🎉');
-      console.log('Saved data:', response.data);
-    } catch (error) {
-      setMessage('Error saving profile. See console.');
-      console.error('Error:', error);
+      if (isExisting) {
+        await api.updateUserProfile(formData);
+        setMessage('Profile updated successfully!');
+      } else {
+        await api.saveUserProfile(formData);
+        setMessage('Profile saved successfully!');
+        setIsExisting(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage('Error saving profile.');
     }
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{ maxWidth: 700, margin:'30px auto', padding:20, background:'#fff', borderRadius:8 }}>
       <h2>My Placement Profile</h2>
-      <p>Enter your details once. This data will be used to auto-fill all Google Forms.</p>
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <input style={styles.input} type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Email (Unique ID)" required />
-        <input style={styles.input} type="text" name="firstName" value={formData.firstName} onChange={handleChange} placeholder="First Name" required />
-        <input style={styles.input} type="text" name="lastName" value={formData.lastName} onChange={handleChange} placeholder="Last Name" required />
-        <input style={styles.input} type="number" name="cgpa" value={formData.cgpa} onChange={handleChange} placeholder="CGPA (e.g., 8.5)" step="0.01" required />
-        {/* Add more input fields for all your data (10th/12th marks, etc.) */}
-        
-        <button type="submit" style={styles.button}>Save Profile</button>
+      <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        <input name="firstName" placeholder="First name" value={formData.firstName} onChange={handleChange} required />
+        <input name="lastName" placeholder="Last name" value={formData.lastName} onChange={handleChange} required />
+        <input name="emailID" placeholder="Email" type="email" value={formData.emailID} onChange={handleChange} required />
+        <input name="phone" placeholder="Phone" value={formData.phone} onChange={handleChange} />
+        <input name="cgpa" placeholder="CGPA" type="number" step="0.01" value={formData.cgpa} onChange={handleChange} />
+        <button type="submit">{isExisting ? 'Update Profile' : 'Save Profile'}</button>
       </form>
-      {message && <p style={styles.message}>{message}</p>}
+      {message && <p>{message}</p>}
     </div>
   );
-};
-
-const styles = {
-    // Basic styling for a clean look
-    container: { maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' },
-    form: { display: 'flex', flexDirection: 'column', gap: '15px' },
-    input: { padding: '10px', borderRadius: '4px', border: '1px solid #ddd' },
-    button: { padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' },
-    message: { marginTop: '20px', textAlign: 'center', fontWeight: 'bold' }
 };
 
 export default UserProfile;

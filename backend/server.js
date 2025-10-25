@@ -1,39 +1,38 @@
-import express from "express";
-import connectDB from "./db.js"; 
-import cors from "cors";
-import dotenv from "dotenv";
-import userRoutes from "./routes/userRoutes.js";
-import autofillRoutes from "./routes/autofillRoutes.js"; // <-- NEW IMPORT: Autofill Routes
-import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
+// backend/server.js
 
-
+import dotenv from 'dotenv';
 dotenv.config();
 
+import express from 'express';
+import cors from 'cors';
+import connectDB from './db.js';
+import userRoutes from './routes/userRoutes.js';
+import autofillRoutes from './routes/autofillRoutes.js';
+
+// Clerk middleware
+import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node';
+
 const app = express();
-app.use(cors(
-    {
-        origin: "http://localhost:5173", // React frontend running on 5173
-        credentials: true
-    }
-));
 app.use(express.json());
+app.use(cors({
+  origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+  credentials: true
+}));
 
-// DB Connection
-connectDB();
+(async () => {
+  try {
+    await connectDB();
 
-// Routes
-// 1. User routes require Clerk Authentication
-app.use("/api/users", ClerkExpressRequireAuth(), userRoutes);
+    // User routes (protected)
+    app.use('/api/users', ClerkExpressRequireAuth(), userRoutes);
 
-// 2. Autofill routes (API root) - Clerk authentication is NOT applied here, 
-//    as we handle auth logic within the controller using data from the frontend body.
-app.use("/api", autofillRoutes); // <-- NEW LINE: Registers the /api/autofill route
+    // Autofill routes (can be public or protected)
+    app.use('/api/autofill', autofillRoutes); // <-- FIXED MOUNT PATH
 
-// Simple health check route
-app.get('/', (req, res) => {
-    res.send('AutoFormComplete Backend API is Running');
-});
-
-// Server Initialization
-let PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (err) {
+    console.error('Server startup error', err);
+    process.exit(1);
+  }
+})();

@@ -16,8 +16,9 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "fuse.js": "^7.1.0",
     "mongodb": "^6.18.0",
-    "mongoose": "^8.17.2",
+    "mongoose": "^8.19.2",
     "playwright": "^1.56.1"
   },
   "devDependencies": {

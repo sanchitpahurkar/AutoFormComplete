@@ -253,8 +253,7 @@ export default function UserForm() {
 
   return (
     <div
-      style={{ backgroundColor: PAGE_BG }}
-      className="min-h-screen flex items-start justify-center py-10 px-4"
+      className="min-h-screen flex items-start justify-center py-10 px-4 bg-custom-grad"
     >
       <style>{`
         :root{

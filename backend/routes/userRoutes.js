@@ -1,15 +1,11 @@
+// backend/routes/userRoutes.js
 import express from "express";
 import { createUser, getUserByClerkId, updateUserByClerkId } from "../controllers/userController.js";
 
 const router = express.Router();
 
-// POST -> /api/users -> create user
-router.post("/", createUser);
-
-// get users by clerk id
-router.get("/me", getUserByClerkId);
-
-// update users by clerkId
-router.put("/me", updateUserByClerkId);
+router.post("/", createUser); // POST /api/users
+router.get("/me", getUserByClerkId); // GET /api/users/me
+router.put("/me", updateUserByClerkId); // PUT /api/users/me
 
 export default router;

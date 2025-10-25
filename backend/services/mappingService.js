@@ -1,80 +1,152 @@
-/**
- * Core mapping logic to match Google Form question labels 
- * to known user profile fields (from MongoDB).
- * * This service uses a defined keyword map and text normalization
- * * to perform robust, flexible matching.
- */
+// backend/services/mappingService.js
+import Fuse from 'fuse.js';
 
 export const KEYWORD_MAP = {
-    // Basic Personal Info
-    firstName: ['first name', 'given name', 'candidate name', 'your name', 'forename'],
-    lastName: ['last name', 'surname', 'family name'],
-    emailID: ['email', 'email address', 'e-mail id', 'personal email'], // Changed from 'email' to 'emailID' to match friend's schema
-    phone: ['phone number', 'mobile number', 'contact number', 'whatsapp number', 'tel number'], // Changed from 'phoneNumber' to 'phone'
-    gender: ['gender', 'sex'],
-    dob: ['date of birth', 'dob'],
-    rknecID: ['rknec id', 'college id', 'student id'], // Added based on friend's schema
-    alternatePhone: ['alternate phone', 'secondary contact'], // Added based on friend's schema
-    currentAddress: ['current address', 'local address'], // Added based on friend's schema
-    permanentAddress: ['permanent address', 'home address'], // Added based on friend's schema
+  // Personal
+  firstName: ['first name', 'given name', 'fname', 'forename'],
+  middleName: ['middle name', 'mid name', 'mname'],
+  lastName: ['last name', 'surname', 'family name', 'lname'],
+  fullName: ['full name', 'name'],
+  emailID: ['email', 'email address', 'e-mail', 'personal email', 'mail'],
+  phone: ['phone', 'phone number', 'mobile number', 'contact number', 'whatsapp', 'mobile'],
+  alternatePhone: ['alternate phone', 'secondary contact', 'alt phone', 'other phone', 'alternate mobile', 'alternate number'],
+  gender: ['gender', 'sex'],
+  dob: ['date of birth', 'dob', 'birth date'],
 
-    // Academic/Score Info
-    cgpa: ['cgpa', 'c.g.p.a.', 'cumulative grade point average', 'current cgpa'],
-    activeBacklogs: ['active backlogs', 'pending backlogs', 'current backlogs'], // Added based on friend's schema
-    deadBacklogs: ['dead backlogs', 'cleared backlogs', 'total backlogs'], // Added based on friend's schema
-    yearOfGraduation: ['graduation year', 'year of passing', 'expected graduation'], // Renamed from passingYear
-    branch: ['branch', 'department', 'discipline', 'major'],
-    enrollmentNumber: ['enrollment number', 'roll number'], // Added based on friend's schema
-    
-    // HSC (12th) Details
-    hscSchoolName: ['hsc school name', '12th school name'],
-    hscBoard: ['hsc board', '12th board'],
-    hscYearOfPassing: ['hsc year of passing', '12th year of passing'],
-    hscPercentage: ['hsc percentage', '12th marks', 'intermediate marks'],
+  // College-specific
+  rknecID: ['rknec', 'rknec id', 'college email', 'college mail', 'college email id', 'college id', 'rknecemail'],
 
-    // SSC (10th) Details
-    sscSchoolName: ['ssc school name', '10th school name'],
-    sscBoard: ['ssc board', '10th board'],
-    sscYearOfPassing: ['ssc year of passing', '10th year of passing'],
-    sscPercentage: ['ssc percentage', '10th marks', 'high school marks'],
+  // Addresses
+  currentAddress: ['current address', 'present address', 'address (current)', 'current residence', 'address now'],
+  permanentAddress: ['permanent address', 'home address', 'permanent residence'],
 
-    // Document/File Uploads
-    resume: ['resume', 'cv upload', 'upload your resume', 'upload cv', 'resume file'],
-    // Note: If friend has marksheets field, add it here too
+  // Academic
+  cgpa: ['cgpa', 'gpa', 'cumulative grade point average'],
+  activeBacklogs: ['active backlogs', 'current backlogs', 'pending backlogs'],
+  deadBacklogs: ['dead backlogs', 'cleared backlogs'],
+  yearOfGraduation: ['graduation year', 'year of passing', 'expected graduation'],
+  branch: ['branch', 'department', 'discipline', 'major'],
+  enrollmentNumber: ['enrollment number', 'roll number'],
+
+  // HSC / SSC
+  hscPercentage: ['hsc percentage', '12th percentage', 'intermediate percentage'],
+  sscPercentage: ['ssc percentage', '10th percentage', 'matric percentage'],
+
+  // Documents
+  resume: ['resume', 'cv', 'upload resume', 'attach resume', 'upload cv'],
+  marksheetPaths: ['marksheets', 'marksheet', 'upload marksheets', 'transcripts', 'academic documents'],
 };
 
-/**
- * Normalizes a string by converting to lowercase, trimming whitespace, and removing punctuation.
- * This makes matching robust against casing, extra spaces, and special characters.
- * @param {string} text - The input string (e.g., a form label).
- * @returns {string} The normalized string.
- */
-export function normalizeText(text) {
-    if (!text) return '';
-    // Remove punctuation and special characters, replace multiple spaces with single space, then trim and lowercase
-    return text.toLowerCase()
-               .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
-               .replace(/\s{2,}/g, ' ')
-               .trim();
+const FIELD_ALIASES = {
+  // common input name -> userProfile key
+  rknecemail: 'rknecID',
+  rknecid: 'rknecID',
+  personalemail: 'emailID',
+  email: 'emailID',
+  phone: 'phone',
+  alternatephone: 'alternatePhone',
+  middlename: 'middleName',
+  firstname: 'firstName',
+  lastname: 'lastName',
+  currentaddress: 'currentAddress',
+  permanentaddress: 'permanentAddress',
+  dob: 'dob',
+  gender: 'gender'
+};
+
+function normalize(s = '') {
+  return String(s)
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201C\u201D]/g, "'")
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-/**
- * Finds the best matching DB field for a given form question label.
- * @param {string} formLabel - The text label scraped from the Google Form.
- * @returns {string | null} The matching DB field name (e.g., 'firstName') or null.
- */
-export function findMatch(formLabel) {
-    const normalizedLabel = normalizeText(formLabel);
+const entries = Object.entries(KEYWORD_MAP).map(([key, phrases]) => ({
+  key,
+  combined: (Array.isArray(phrases) ? phrases : [phrases]).map(normalize).join(' ')
+}));
 
-    for (const [dbField, keywords] of Object.entries(KEYWORD_MAP)) {
-        for (const keyword of keywords) {
-            const normalizedKeyword = normalizeText(keyword);
-            
-            // Check if the normalized form label contains the normalized keyword
-            if (normalizedLabel.includes(normalizedKeyword)) {
-                return dbField;
-            }
-        }
+const fuse = new Fuse(entries, {
+  keys: ['combined'],
+  threshold: 0.48,
+  includeScore: true
+});
+
+/**
+ * If the normalized token (from name/id/placeholder) directly matches a known alias
+ * or directly matches a user-facing key in KEYWORD_MAP, return that key immediately.
+ */
+function matchByFieldName(normalizedLabel) {
+  if (!normalizedLabel) return null;
+  // direct alias
+  if (FIELD_ALIASES[normalizedLabel]) return FIELD_ALIASES[normalizedLabel];
+  // direct key match (e.g., input name is "alternatePhone")
+  for (const key of Object.keys(KEYWORD_MAP)) {
+    if (key.toLowerCase() === normalizedLabel) return key;
+  }
+  return null;
+}
+
+export function findMatch(label) {
+  if (!label) return null;
+  const n = normalize(label);
+
+  // If label contains multiple tokens, check each token for exact alias/key match.
+  const tokens = n.split(' ').filter(Boolean);
+  for (const t of tokens) {
+    const byName = matchByFieldName(t);
+    if (byName) return byName;
+  }
+
+  // Also check whole normalized label
+  const byWhole = matchByFieldName(n);
+  if (byWhole) return byWhole;
+
+  // Quick substring / exact phrase checks
+  for (const [k, phrases] of Object.entries(KEYWORD_MAP)) {
+    for (const p of (Array.isArray(phrases) ? phrases : [phrases])) {
+      const np = normalize(p);
+      if (!np) continue;
+      if (n.includes(np) || np.includes(n)) return k;
     }
-    return null; // No match found
+  }
+
+  // Fuzzy search with fuse
+  const results = fuse.search(n);
+  if (results.length > 0 && typeof results[0].score === 'number' && results[0].score <= 0.48) {
+    return results[0].item.key;
+  }
+
+  // Token overlap fallback
+  if (results.length > 0) {
+    const candidate = results[0].item.combined || '';
+    const candTokens = new Set(candidate.split(' ').filter(Boolean));
+    let common = 0;
+    for (const t of tokens) if (candTokens.has(t)) common++;
+    if (common >= 1) return results[0].item.key;
+  }
+
+  return null;
 }
+
+export function choiceMatches(optionLabel = '', desiredValue = '') {
+  const a = normalize(optionLabel);
+  const b = normalize(desiredValue);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const at = new Set(a.split(' ').filter(Boolean));
+  const bt = new Set(b.split(' ').filter(Boolean));
+  let common = 0;
+  for (const t of at) if (bt.has(t)) common++;
+  return common >= 1;
+}
+
+export default {
+  findMatch,
+  choiceMatches,
+  KEYWORD_MAP,
+  FIELD_ALIASES
+};
