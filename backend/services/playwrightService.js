@@ -41,89 +41,31 @@ async function getPersistentContext(userKey, { headless = false } = {}) {
 
   const pages = context.pages();
   const page = pages.length ? pages[0] : await context.newPage();
-  await page.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); });
+
+  // try to mask automation flag
+  await page.addInitScript(() => {
+    try {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    } catch (e) { /* ignore */ }
+  });
 
   return { context, page, browser: context.browser(), userDir };
 }
 
+/** Detect whether Google sign-in is likely required on the current page */
 async function detectGoogleSignInRequired(page) {
   try {
-    const googleLinks = await page.$$('a[href*="accounts.google.com"]');
-    const signInText = await page.locator('text=Sign in').count();
-    return googleLinks.length > 0 || signInText > 0;
-  } catch (err) { return false; }
-}
-
-async function isFieldRequired(container) {
-  try {
-    const reqInput = await container.$('input[required], textarea[required], select[required]');
-    if (reqInput) return true;
-    const aria = await container.$('[aria-required="true"]');
-    if (aria) return true;
-    const requiredText = await container.locator('text=Required').count();
-    if (requiredText > 0) return true;
-    const labelEl = await container.$('label, div[role="heading"], .freebirdFormviewerComponentsQuestionBaseTitle');
-    if (labelEl) {
-      const t = (await labelEl.innerText()).trim().toLowerCase();
-      if (t.includes('*') || t.includes('required')) return true;
-    }
+    const hasGoogleLink = (await page.$$('a[href*="accounts.google.com"]')).length > 0;
+    const signinTextCount = await page.locator('text=/sign in to save/i').count().catch(() => 0);
+    const signBtnCount = await page.locator('text=/\\bSign in\\b/i').count().catch(() => 0);
+    return hasGoogleLink || signinTextCount > 0 || signBtnCount > 0;
+  } catch (err) {
     return false;
-  } catch (e) { return false; }
-}
-
-async function extractInputAttributes(container) {
-  try {
-    const input = await container.$('input, textarea, select, [role="textbox"], [contenteditable="true"]');
-    if (!input) return { name: '', id: '', placeholder: '', aria: '', type: '', element: null };
-    const name = (await input.getAttribute('name')) || '';
-    const id = (await input.getAttribute('id')) || '';
-    const ph = (await input.getAttribute('placeholder')) || '';
-    const aria = (await input.getAttribute('aria-label')) || '';
-    const inputType = (await input.getAttribute('type')) || (await input.evaluate(el => el.tagName.toLowerCase()));
-    return { name, id, placeholder: ph, aria, type: inputType, element: input };
-  } catch (e) {
-    return { name: '', id: '', placeholder: '', aria: '', type: '', element: null };
   }
 }
 
-async function buildCompositeLabel(container) {
-  try {
-    const labelSelectors = ['div[role="heading"]', '.freebirdFormviewerComponentsQuestionBaseTitle', '.doc1P', '.quantumWizFormtitleContent', 'label'];
-    let label = '';
-    for (const ls of labelSelectors) {
-      try {
-        const el = await container.$(ls);
-        if (el) {
-          const t = (await el.innerText()).trim();
-          if (t) { label = t; break; }
-        }
-      } catch (e) {}
-    }
-    if (!label) {
-      const txt = (await container.innerText()).trim();
-      label = txt.split('\n')[0] || '';
-    }
-
-    const attrs = await extractInputAttributes(container);
-    const attrText = [attrs.name, attrs.id, attrs.placeholder, attrs.aria, attrs.type].filter(Boolean).join(' ');
-    return { composite: `${label} ${attrText}`.trim(), attrs };
-  } catch (e) {
-    return { composite: '', attrs: {} };
-  }
-}
-
-function splitName(fullName = '') {
-  const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { firstName: '', middleName: '', lastName: '' };
-  if (parts.length === 1) return { firstName: parts[0], middleName: '', lastName: '' };
-  if (parts.length === 2) return { firstName: parts[0], middleName: '', lastName: parts[1] };
-  return { firstName: parts[0], middleName: parts.slice(1, -1).join(' '), lastName: parts[parts.length - 1] };
-}
-
-function normalizeString(v) {
-  if (v === undefined || v === null) return '';
-  return String(v).trim();
-}
+/** Normalizers and small helpers */
+function normalizeString(v) { if (v === undefined || v === null) return ''; return String(v).trim(); }
 
 async function setInputValue(elHandle, value) {
   try {
@@ -131,54 +73,73 @@ async function setInputValue(elHandle, value) {
       if ('value' in el) el.value = v;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-      try { el.blur(); } catch (e) {}
     }, value);
     return true;
   } catch (e) {
-    return false;
+    try {
+      await elHandle.fill(value);
+      return true;
+    } catch (_) { return false; }
   }
 }
 
-/**
- * Get label-like text for an option/radio element using multiple fallbacks:
- * - element.innerText
- * - closest <label> innerText
- * - aria-label attribute
- * - sibling text nodes
- */
+/** Extract composite label and input attributes for mapping */
+async function extractCompositeAndAttrs(container) {
+  try {
+    const labelSelectors = ['div[role="heading"]', '.freebirdFormviewerComponentsQuestionBaseTitle', '.doc1P', 'label', '.quantumWizFormtitleContent'];
+    let label = '';
+    for (const s of labelSelectors) {
+      const el = await container.$(s);
+      if (el) {
+        const t = (await el.innerText()).trim();
+        if (t) { label = t; break; }
+      }
+    }
+    if (!label) {
+      const txt = (await container.innerText()).trim();
+      label = txt.split('\n')[0] || '';
+    }
+
+    const input = await container.$('input, textarea, select, [role="textbox"], [contenteditable="true"]');
+    const name = input ? (await input.getAttribute('name')) || '' : '';
+    const id = input ? (await input.getAttribute('id')) || '' : '';
+    const placeholder = input ? (await input.getAttribute('placeholder')) || '' : '';
+    const aria = input ? (await input.getAttribute('aria-label')) || '' : '';
+    const typeAttr = input ? (await input.getAttribute('type')) || (await input.evaluate(e => e.tagName.toLowerCase())) : '';
+
+    const attrs = { name, id, placeholder, aria, type: typeAttr, element: input };
+    const composite = `${label} ${name} ${id} ${placeholder} ${aria} ${typeAttr}`.trim();
+
+    return { composite, attrs };
+  } catch (err) {
+    return { composite: '', attrs: {} };
+  }
+}
+
+/** Field detection: is required? */
+async function isFieldRequired(container) {
+  try {
+    const req = await container.$('input[required], textarea[required], select[required]');
+    if (req) return true;
+    const ariaReq = await container.$('[aria-required="true"]');
+    if (ariaReq) return true;
+    const textCount = await container.locator('text=/required/i').count().catch(() => 0);
+    return textCount > 0;
+  } catch (e) { return false; }
+}
+
+/** Helpers to choose radio/checkbox/select options */
 async function getOptionLabelText(optionElement) {
   try {
-    let t = (await optionElement.innerText())?.trim() || '';
-    if (t) return t;
+    const text = (await optionElement.innerText())?.trim();
+    if (text) return text;
     const aria = (await optionElement.getAttribute('aria-label')) || '';
     if (aria) return aria.trim();
-
-    // try to find a parent label or nearest label element
-    const labelText = await optionElement.evaluate((el) => {
-      // look for nearest label
-      let node = el;
-      while (node && node.parentElement) {
-        const lbl = node.parentElement.querySelector('label');
-        if (lbl && lbl.innerText && lbl.innerText.trim()) return lbl.innerText.trim();
-        node = node.parentElement;
-      }
-      return '';
-    });
-    if (labelText) return labelText;
-
-    // fallback: try textContent of parent
-    const parentText = (await optionElement.evaluate(el => (el.parentElement?.innerText || '')?.trim())) || '';
+    const parentText = (await optionElement.evaluate(el => (el.parentElement?.innerText || '').trim())) || '';
     return parentText;
-  } catch (e) {
-    return '';
-  }
+  } catch (e) { return ''; }
 }
 
-/**
- * chooseRadioOrOptions improved:
- * - prefer exact whole-word match (word boundaries) so 'Male' won't match 'Other: Male'
- * - prefer exact label equality, then exact whole-word, then token fuzzy but skip 'other' options unless desired includes 'other'
- */
 async function chooseRadioOrOptions(radios, desiredValue) {
   const desired = normalizeString(desiredValue).toLowerCase();
   const items = [];
@@ -186,45 +147,30 @@ async function chooseRadioOrOptions(radios, desiredValue) {
     const labelText = (await getOptionLabelText(r)) || '';
     items.push({ element: r, label: labelText.trim() });
   }
-
-  // 1) exact equality
+  // exact match
   let exact = items.find(it => it.label.toLowerCase() === desired);
-  if (exact) {
-    await exact.element.click().catch(()=>{});
-    return { clickedLabel: exact.label, usedOtherInput: false };
-  }
-
-  // 2) exact whole-word match (word boundaries) - e.g., 'Male' inside 'Other: Male' will NOT match because of word boundary logic
-  const wholeWord = items.find(it => {
+  if (exact) { await exact.element.click().catch(()=>{}); return { clickedLabel: exact.label, usedOtherInput: false }; }
+  // whole-word boundary match
+  const whole = items.find(it => {
     const low = it.label.toLowerCase();
-    // regex for whole word; escape desired
     const escaped = desired.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`\\b${escaped}\\b`, 'i');
-    return re.test(low) && !/^\s*other\b/.test(low); // skip if label starts with 'other'
+    return re.test(low) && !/^\s*other\b/.test(low);
   });
-  if (wholeWord) {
-    await wholeWord.element.click().catch(()=>{});
-    return { clickedLabel: wholeWord.label, usedOtherInput: false };
-  }
-
-  // 3) prefer token fuzzy but skip options that START with 'other' unless desired contains 'other'
+  if (whole) { await whole.element.click().catch(()=>{}); return { clickedLabel: whole.label, usedOtherInput: false }; }
+  // fuzzy token match
   for (const it of items) {
-    const low = it.label.toLowerCase();
-    if (low.startsWith('other') && !desired.includes('other')) continue;
-    if (mappingService.choiceMatches(it.label, desiredValue)) {
-      await it.element.click().catch(()=>{});
-      return { clickedLabel: it.label, usedOtherInput: false };
-    }
+    if (/^\s*other\b/i.test(it.label) && !desired.includes('other')) continue;
+    if (mappingService.choiceMatches(it.label, desiredValue)) { await it.element.click().catch(()=>{}); return { clickedLabel: it.label, usedOtherInput: false }; }
   }
-
-  // 4) if there is an 'Other' option and desired is not empty, click it and attempt to fill nearby text input
+  // try Other option: click and fill nearby input
   const other = items.find(it => /^\s*other\b/i.test(it.label));
   if (other && desired) {
     await other.element.click().catch(()=>{});
     try {
       const parentHandle = await other.element.evaluateHandle(el => el.closest('div') || el.parentElement);
       if (parentHandle) {
-        const otherInput = await parentHandle.asElement().$('input[type="text"], input[type="email"], textarea, [contenteditable="true"]');
+        const otherInput = await parentHandle.asElement().$('input[type="text"], textarea, [contenteditable="true"]');
         if (otherInput) {
           await setInputValue(otherInput, desiredValue);
           return { clickedLabel: other.label, usedOtherInput: true };
@@ -233,7 +179,6 @@ async function chooseRadioOrOptions(radios, desiredValue) {
     } catch (e) {}
     return { clickedLabel: other.label, usedOtherInput: false };
   }
-
   return null;
 }
 
@@ -241,49 +186,37 @@ async function chooseSelectOption(selectEl, desiredValue) {
   const options = await selectEl.$$('option');
   const desired = normalizeString(desiredValue).toLowerCase();
   for (const opt of options) {
-    const text = (await opt.textContent())?.trim() || '';
-    if (text.toLowerCase() === desired) {
-      const valAttr = await opt.getAttribute('value');
-      await selectEl.selectOption(valAttr || { label: text }).catch(()=>{});
-      return { chosen: text, exact: true };
+    const txt = (await opt.textContent()).trim();
+    if (txt.toLowerCase() === desired) {
+      const val = await opt.getAttribute('value');
+      await selectEl.selectOption(val || { label: txt }).catch(()=>{});
+      return { chosen: txt, exact: true };
     }
   }
   for (const opt of options) {
-    const text = (await opt.textContent())?.trim() || '';
-    if (mappingService.choiceMatches(text, desiredValue)) {
-      const valAttr = await opt.getAttribute('value');
-      await selectEl.selectOption(valAttr || { label: text }).catch(()=>{});
-      return { chosen: text, exact: false };
+    const txt = (await opt.textContent()).trim();
+    if (mappingService.choiceMatches(txt, desiredValue)) {
+      const val = await opt.getAttribute('value');
+      await selectEl.selectOption(val || { label: txt }).catch(()=>{});
+      return { chosen: txt, exact: false };
     }
   }
   await selectEl.selectOption({ label: desiredValue }).catch(()=>{});
   return null;
 }
 
-/**
- * Attempt to fill a date field inside a container.
- * Tries:
- *  - input[type="date"] with ISO yyyy-mm-dd
- *  - input[type="text"] or placeholder that looks like dd/mm/yyyy or dd-mm-yyyy: set dd-mm-yyyy
- *  - direct evaluate to set value + dispatch events
- */
+/** Fill date heuristics */
 async function fillDateInContainer(container, rawValue) {
   const val = normalizeString(rawValue);
   if (!val) return false;
-
-  // helper to attempt formats
   function toISO(d) {
-    // accept yyyy-mm-dd or dd-mm-yyyy input
     if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
     if (/^\d{2}-\d{2}-\d{4}$/.test(d)) {
-      const [dd, mm, yyyy] = d.split('-');
-      return `${yyyy}-${mm}-${dd}`;
+      const [dd, mm, yyyy] = d.split('-'); return `${yyyy}-${mm}-${dd}`;
     }
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(d)) {
-      const [dd, mm, yyyy] = d.split('/');
-      return `${yyyy}-${mm}-${dd}`;
+      const [dd, mm, yyyy] = d.split('/'); return `${yyyy}-${mm}-${dd}`;
     }
-    // try Date.parse fallback
     const parsed = new Date(d);
     if (!isNaN(parsed)) {
       const yyyy = parsed.getFullYear();
@@ -293,62 +226,30 @@ async function fillDateInContainer(container, rawValue) {
     }
     return null;
   }
-
   try {
-    // prefer input[type="date"]
     const dateInput = await container.$('input[type="date"]');
     if (dateInput) {
       const iso = toISO(val);
-      if (iso) {
-        await setInputValue(dateInput, iso);
-        return true;
-      }
+      if (iso) { await setInputValue(dateInput, iso); return true; }
     }
-
-    // find any visible text input or input with placeholder like dd-mm-yyyy
-    const textLike = await container.$('input[type="text"], input[type="tel"], input[type="email"], input:not([type])');
-    if (textLike) {
-      // try dd-mm-yyyy visible format first if placeholder suggests, else ISO
-      const ph = (await textLike.getAttribute('placeholder')) || '';
-      const isoCandidate = toISO(val);
-      const ddmm = isoCandidate ? isoCandidate.split('-').slice().reverse().join('-') : null; // yyyy-mm-dd -> dd-mm-yyyy
-      // decide which to set
-      let toSet = isoCandidate;
-      if (ph && /dd|mm|yyyy/.test(ph.toLowerCase()) && ddmm) {
-        // placeholder expects dd-mm-yyyy visible; set dd-mm-yyyy
-        toSet = ddmm;
-      }
-      if (toSet) {
-        await setInputValue(textLike, toSet);
-        return true;
-      }
+    const anyText = await container.$('input[type="text"], input[type="tel"], textarea, input:not([type])');
+    if (anyText) {
+      const iso = toISO(val);
+      const ph = (await anyText.getAttribute('placeholder')) || '';
+      const ddmm = iso ? iso.split('-').slice().reverse().join('-') : val;
+      const toSet = (ph && /dd|mm|yyyy/i.test(ph) && ddmm) ? ddmm : (iso || val);
+      await setInputValue(anyText, toSet);
+      return true;
     }
-
-    // as a final fallback, try any input inside the container and set a dd-mm-yyyy or iso form
-    const anyInput = await container.$('input, textarea, [contenteditable="true"]');
-    if (anyInput) {
-      const isoCandidate = toISO(val);
-      const ddmm = isoCandidate ? isoCandidate.split('-').slice().reverse().join('-') : val;
-      const tryOrder = [isoCandidate, ddmm, val].filter(Boolean);
-      for (const candidate of tryOrder) {
-        try {
-          await setInputValue(anyInput, candidate);
-          return true;
-        } catch (e) {}
-      }
-    }
-
-    // no date control found
     return false;
-  } catch (e) {
-    return false;
-  }
+  } catch (e) { return false; }
 }
 
+/** Core filler which returns which fields were filled and unmatched lists */
 async function performFilling(page, userProfile, sessionId) {
-  const fillResults = [];
-  const unmatchedMandatoryFields = [];
-  const unmatchedOptionalFields = [];
+  const filled = [];
+  const unmatchedMandatory = [];
+  const unmatchedOptional = [];
 
   await page.waitForTimeout(400);
 
@@ -364,16 +265,15 @@ async function performFilling(page, userProfile, sessionId) {
     if (containers.length) break;
   }
   if (!containers || containers.length === 0) {
+    // fallback selector that finds parent divs with form inputs
     containers = await page.$$(':scope div:has(input, textarea, select, [role="textbox"])');
   }
 
   for (const c of containers) {
-    const { composite, attrs } = await buildCompositeLabel(c);
+    const { composite, attrs } = await extractCompositeAndAttrs(c);
     if (!composite) continue;
-
     const required = await isFieldRequired(c);
 
-    // elements in container
     const textInput = await c.$('input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="date"], textarea').catch(()=>null);
     const contentable = await c.$('[role="textbox"], [contenteditable="true"]').catch(()=>null);
     const selectEl = await c.$('select').catch(()=>null);
@@ -381,57 +281,39 @@ async function performFilling(page, userProfile, sessionId) {
     const radios = await c.$$('[role="radio"], .quantumWizTogglePaperRadioContainer, .freebirdFormviewerComponentsQuestionRadioChoice').catch(()=>[]);
     const checks = await c.$$('[role="checkbox"], .quantumWizTogglePapercheckboxInnerBox, .freebirdFormviewerComponentsQuestionCheckboxChoice').catch(()=>[]);
 
-    // try direct mapping via input name/id/placeholder/aria
-    const nameTokens = [attrs.name, attrs.id, attrs.placeholder, attrs.aria].filter(Boolean).map(s => String(s).toLowerCase());
+    // Attempt mapping using attributes first then composite label
+    const tokens = [attrs.name, attrs.id, attrs.placeholder, attrs.aria].filter(Boolean).map(t => String(t).toLowerCase());
     let mapped = null;
-    for (const t of nameTokens) {
-      const nt = t.replace(/[^a-z0-9]/g, '');
-      const byAlias = mappingService.FIELD_ALIASES?.[nt] || null;
-      if (byAlias) { mapped = byAlias; break; }
-      for (const k of Object.keys(mappingService.KEYWORD_MAP)) {
-        if (k.toLowerCase() === nt) { mapped = k; break; }
-      }
-      if (mapped) break;
+    for (const t of tokens) {
+      const cleaned = t.replace(/[^a-z0-9]/g, '');
+      if (mappingService.KEYWORD_MAP && mappingService.KEYWORD_MAP[cleaned]) { mapped = cleaned; break; }
     }
-
     if (!mapped) mapped = mappingService.findMatch(composite);
 
-    if (mapped === 'phone' && /alternate|alt|secondary|other/i.test(composite)) {
-      mapped = 'alternatePhone';
-    }
-
-    console.log(`[autofill:${sessionId}] composite="${composite}" -> mapped="${mapped}" required=${required} attrs=${JSON.stringify(attrs)}`);
+    // small heuristics
+    if (!mapped && /\bname\b/i.test(composite)) mapped = 'firstName';
+    if (!mapped && /\bcgpa\b/i.test(composite)) mapped = 'cgpa';
 
     if (!mapped) {
       const entry = { label: composite, reason: 'no mapping' };
-      if (required) unmatchedMandatoryFields.push(entry); else unmatchedOptionalFields.push(entry);
+      (required ? unmatchedMandatory : unmatchedOptional).push(entry);
       continue;
     }
 
-    // enforce strict rules for rknecID and alternatePhone (no fallback)
-    if (mapped === 'rknecID' && (!userProfile.rknecID || String(userProfile.rknecID).trim() === '')) {
-      const entry = { label: composite, mapped, reason: 'rknec email not present in DB' };
-      if (required) unmatchedMandatoryFields.push(entry); else unmatchedOptionalFields.push(entry);
-      continue;
-    }
-    if (mapped === 'alternatePhone' && (!userProfile.alternatePhone || String(userProfile.alternatePhone).trim() === '')) {
-      const entry = { label: composite, mapped, reason: 'alternate phone not present in DB' };
-      if (required) unmatchedMandatoryFields.push(entry); else unmatchedOptionalFields.push(entry);
-      continue;
-    }
-
-    // get user value
+    // derive user value
     let userValue = userProfile[mapped];
-    if (!userValue && mapped === 'rknecID') userValue = userProfile.rknecID;
-    if (!userValue && (mapped === 'firstName' || mapped === 'middleName' || mapped === 'lastName')) {
-      const full = userProfile.fullName || `${userProfile.firstName || ''} ${userProfile.middleName || ''} ${userProfile.lastName || ''}`;
-      const parts = splitName(full);
-      userValue = parts[mapped] || null;
+    // fallback for full name + parts
+    if (!userValue && (mapped === 'firstName' || mapped === 'lastName' || mapped === 'middleName')) {
+      const full = userProfile.fullName || `${userProfile.firstName || ''} ${userProfile.middleName || ''} ${userProfile.lastName || ''}`.trim();
+      const parts = full.split(/\s+/).filter(Boolean);
+      if (mapped === 'firstName') userValue = parts[0] || '';
+      if (mapped === 'lastName') userValue = parts.slice(-1)[0] || '';
+      if (mapped === 'middleName') userValue = parts.slice(1, -1).join(' ') || '';
     }
 
     if (userValue === undefined || userValue === null || String(userValue).trim() === '') {
       const entry = { label: composite, mapped, reason: 'no user data' };
-      if (required) unmatchedMandatoryFields.push(entry); else unmatchedOptionalFields.push(entry);
+      (required ? unmatchedMandatory : unmatchedOptional).push(entry);
       continue;
     }
 
@@ -439,66 +321,45 @@ async function performFilling(page, userProfile, sessionId) {
 
     let didFill = false;
     try {
-      // Special handling for DOB
+      // DOB
       if (mapped === 'dob') {
         const ok = await fillDateInContainer(c, valueStr);
-        if (ok) {
-          didFill = true;
-          fillResults.push({ label: composite, mapped, method: 'date', value: valueStr });
-        } else {
-          // if not filled by date logic, continue to generic handlers below
-        }
+        if (ok) { didFill = true; filled.push({ label: composite, mapped, method: 'date', value: valueStr }); }
       }
 
-      // TEXT inputs
+      // text inputs
       if (!didFill && textInput) {
-        const typeAttr = (await textInput.getAttribute('type')) || '';
-        const isoLike = /^\d{4}-\d{2}-\d{2}$/.test(valueStr);
-        // general set
         const ok = await setInputValue(textInput, valueStr);
-        if (ok) {
-          didFill = true;
-          fillResults.push({ label: composite, mapped, method: 'text', value: valueStr });
-        } else {
-          await textInput.fill(valueStr).catch(async () => { await textInput.type(valueStr); });
-          didFill = true;
-          fillResults.push({ label: composite, mapped, method: 'text-fallback', value: valueStr });
-        }
+        if (ok) { didFill = true; filled.push({ label: composite, mapped, method: 'text', value: valueStr }); }
       }
 
       // contenteditable
       if (!didFill && contentable) {
         await setInputValue(contentable, valueStr);
         didFill = true;
-        fillResults.push({ label: composite, mapped, method: 'contenteditable', value: valueStr });
+        filled.push({ label: composite, mapped, method: 'contenteditable', value: valueStr });
       }
 
       // select
       if (!didFill && selectEl) {
-        const selRes = await chooseSelectOption(selectEl, valueStr);
-        if (selRes) {
-          didFill = true;
-          fillResults.push({ label: composite, mapped, method: 'select', chosen: selRes.chosen, exact: !!selRes.exact });
-        }
+        const sel = await chooseSelectOption(selectEl, valueStr);
+        if (sel) { didFill = true; filled.push({ label: composite, mapped, method: 'select', chosen: sel.chosen, exact: !!sel.exact }); }
       }
 
       // radios
       if (!didFill && radios && radios.length) {
         const chosen = await chooseRadioOrOptions(radios, valueStr);
-        if (chosen) {
-          didFill = true;
-          fillResults.push({ label: composite, mapped, method: 'radio', chosen: chosen.clickedLabel, usedOtherInput: chosen.usedOtherInput });
-        }
+        if (chosen) { didFill = true; filled.push({ label: composite, mapped, method: 'radio', chosen: chosen.clickedLabel, usedOtherInput: chosen.usedOtherInput }); }
       }
 
       // checkboxes
       if (!didFill && checks && checks.length) {
         for (const cb of checks) {
-          const cText = (await cb.innerText()).trim() || (await cb.getAttribute('aria-label') || '').trim();
-          if (mappingService.choiceMatches(cText, valueStr)) {
+          const txt = (await cb.innerText()).trim() || (await cb.getAttribute('aria-label') || '').trim();
+          if (mappingService.choiceMatches(txt, valueStr)) {
             await cb.click().catch(()=>{});
             didFill = true;
-            fillResults.push({ label: composite, mapped, method: 'checkbox', matched: cText });
+            filled.push({ label: composite, mapped, method: 'checkbox', matched: txt });
             break;
           }
         }
@@ -506,18 +367,128 @@ async function performFilling(page, userProfile, sessionId) {
 
       if (!didFill) {
         const entry = { label: composite, mapped, reason: 'no input matched' };
-        if (required) unmatchedMandatoryFields.push(entry); else unmatchedOptionalFields.push(entry);
+        (required ? unmatchedMandatory : unmatchedOptional).push(entry);
       }
     } catch (err) {
-      console.warn(`[autofill:${sessionId}] error filling "${composite}":`, err?.message || err);
       const entry = { label: composite, mapped, reason: `fill-error:${err?.message || err}` };
-      if (required) unmatchedMandatoryFields.push(entry); else unmatchedOptionalFields.push(entry);
+      (required ? unmatchedMandatory : unmatchedOptional).push(entry);
     }
-  }
+  } // end container loop
 
-  return { fieldsFilled: fillResults, unmatchedMandatoryFields, unmatchedOptionalFields };
+  return { fieldsFilled: filled, unmatchedMandatoryFields: unmatchedMandatory, unmatchedOptionalFields: unmatchedOptional };
 }
 
+/**
+ * Helper: get a small fingerprint for the current page's first question label (used to detect page change)
+ */
+async function getPageFingerprint(page) {
+  try {
+    const questionElements = await page.$$(
+      'div[role="listitem"], .freebirdFormviewerViewItemsItemItem, .freebirdFormviewerViewItemsItem, .quantumWizFormcdQuestionListItem'
+    );
+    if (!questionElements || questionElements.length === 0) return '';
+
+    const texts = [];
+    for (const el of questionElements) {
+      const t = await el.innerText().catch(() => '');
+      if (t) texts.push(t.trim().split('\n')[0]);
+    }
+
+    // Combine first few question texts for reliable section fingerprint
+    return texts.slice(0, 3).join('|');
+  } catch (e) {
+    console.warn('Fingerprint error:', e);
+    return '';
+  }
+}
+/**
+ * Improved multi-page filler: reliably detects new sections and clicks Next/Continue.
+ */
+async function fillAllPages(page, userProfile, sessionId, opts = {}) {
+  const maxPages = opts.maxPages || 15;
+  const aggregated = {
+    fieldsFilled: [],
+    unmatchedMandatoryFields: [],
+    unmatchedOptionalFields: [],
+    screenshots: []
+  };
+
+  let currentPage = 0;
+  let prevFingerprint = await getPageFingerprint(page);
+
+  for (; currentPage < maxPages; currentPage++) {
+    console.log(`[autofill:${sessionId}] Filling page ${currentPage + 1} (fingerprint: "${prevFingerprint}")`);
+
+    const result = await performFilling(page, userProfile, sessionId);
+    aggregated.fieldsFilled.push(...(result.fieldsFilled || []));
+    aggregated.unmatchedMandatoryFields.push(...(result.unmatchedMandatoryFields || []));
+    aggregated.unmatchedOptionalFields.push(...(result.unmatchedOptionalFields || []));
+
+    const ss = await safeScreenshot(page);
+    if (ss) aggregated.screenshots.push({ page: currentPage + 1, data: ss });
+
+    // Check for visible Submit
+    const submitBtn = page.locator(
+      'div[role="button"]:has(span:has-text("Submit")), div[role="button"]:has-text("Submit")'
+    ).first();
+    if (await submitBtn.isVisible().catch(() => false)) {
+      console.log(`[autofill:${sessionId}] Submit button visible, stopping at page ${currentPage + 1}.`);
+      break;
+    }
+
+    // Locate visible Next / Continue
+    const nextBtn = page.locator(
+      'div[role="button"]:has(span:has-text("Next")),' +
+      'div[role="button"]:has(span:has-text("Continue")),' +
+      'div[role="button"]:has-text("Next"),' +
+      'div[role="button"]:has-text("Continue")'
+    ).filter({ hasNot: page.locator('[disabled]') }).first();
+
+    if (!(await nextBtn.isVisible().catch(() => false))) {
+      console.log(`[autofill:${sessionId}] No visible Next/Continue button on page ${currentPage + 1}.`);
+      break;
+    }
+
+    // Record pre-transition state
+    const oldFingerprint = prevFingerprint;
+    const oldCount = await page.locator('div[role="listitem"], .freebirdFormviewerViewItemsItemItem').count();
+
+    // Click Next
+    try {
+      await nextBtn.scrollIntoViewIfNeeded();
+      await nextBtn.click({ delay: 60 });
+    } catch (err) {
+      console.warn(`[autofill:${sessionId}] Failed normal click (${err.message}), retrying JS click`);
+      await page.evaluate(el => el.click(), nextBtn).catch(() => {});
+    }
+
+    // Wait for section change (detect fingerprint or count change)
+    let changed = false;
+    for (let attempt = 0; attempt < 15 && !changed; attempt++) {
+      await page.waitForTimeout(600);
+      const newFp = await getPageFingerprint(page);
+      const newCount = await page.locator('div[role="listitem"], .freebirdFormviewerViewItemsItemItem').count();
+      if ((newFp && newFp !== oldFingerprint) || newCount !== oldCount) changed = true;
+    }
+
+    if (!changed) {
+      console.warn(`[autofill:${sessionId}] Page change not detected — waiting extra 2s`);
+      await page.waitForTimeout(2000);
+    }
+
+    prevFingerprint = await getPageFingerprint(page);
+    await page.waitForTimeout(800);
+  }
+
+  return aggregated;
+}
+/**
+ * startAutofill:
+ * - opens persistent context for userKey
+ * - navigates to the formUrl
+ * - if Google sign-in required => returns needsGoogleLogin: true (keeps session alive)
+ * - if signed-in, performs filling across all pages and returns diagnostics (keeps session alive so user can submit manually)
+ */
 export async function startAutofill({ userKey, formUrl, userProfile, headless = false } = {}) {
   if (!userKey) throw new Error('userKey required');
   if (!formUrl) throw new Error('formUrl required');
@@ -526,133 +497,94 @@ export async function startAutofill({ userKey, formUrl, userProfile, headless = 
   const sessionId = crypto.randomUUID();
   const { context, page, userDir } = await getPersistentContext(userKey, { headless });
 
-  let isClosed = false;
-  page.on('close', () => { isClosed = true; });
+  let pageClosed = false;
+  page.on('close', () => { pageClosed = true; });
 
-  activeSessions.set(sessionId, { userKey, context, page, createdAt: Date.now(), isClosed, userDir });
+  activeSessions.set(sessionId, { userKey, context, page, createdAt: Date.now(), pageClosed, userDir });
 
-  await page.goto(formUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(800);
+  try {
+    await page.goto(formUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(700);
 
-  const needsLogin = await detectGoogleSignInRequired(page);
-  if (needsLogin) {
-    console.log(`[autofill:${sessionId}] Google login required for userKey=${userKey}.`);
-    return {
-      sessionId,
-      needsGoogleLogin: true,
-      message: 'Please sign in to Google in the opened browser and then click Continue.'
-    };
+    // Detect if Google sign-in is required
+    const needsLogin = await detectGoogleSignInRequired(page);
+    if (needsLogin) {
+      console.log(`[autofill:${sessionId}] Google sign-in required. Session kept open at ${page.url()}`);
+      return { sessionId, needsGoogleLogin: true, message: 'Please sign in to Google in the opened browser window and then click Continue.' };
+    }
+
+    // Fill all pages
+    const agg = await fillAllPages(page, userProfile, sessionId, { maxPages: 20 });
+
+    const finalScreenshot = pageClosed ? null : await safeScreenshot(page);
+
+    return { sessionId, screenshotBase64: finalScreenshot, ...agg };
+  } catch (err) {
+    console.error(`[autofill:${sessionId}] startAutofill error:`, err);
+    const ss = (activeSessions.get(sessionId)?.page && !pageClosed) ? await safeScreenshot(activeSessions.get(sessionId).page) : null;
+    // include limited info but keep session alive for debugging
+    throw new Error(`Autofill start failed: ${err.message || err}. screenshotIncluded=${!!ss}`);
   }
-
-  const overallResults = {
-    fieldsFilled: [],
-    unmatchedMandatoryFields: [],
-    unmatchedOptionalFields: [],
-    screenshots: [],
-  };
-
-  let pageIndex = 1;
-
-  while (true) {
-    console.log(`[autofill:${sessionId}] Filling section ${pageIndex}...`);
-    const result = await performFilling(page, userProfile, sessionId);
-
-    overallResults.fieldsFilled.push(...result.fieldsFilled);
-    overallResults.unmatchedMandatoryFields.push(...result.unmatchedMandatoryFields);
-    overallResults.unmatchedOptionalFields.push(...result.unmatchedOptionalFields);
-
-    const screenshotBase64 = isClosed ? null : await safeScreenshot(page);
-    if (screenshotBase64) overallResults.screenshots.push({ page: pageIndex, data: screenshotBase64 });
-
-    // --- 1️⃣ Detect Submit button ---
-    const submitBtn = await page.$('text=/\\bSubmit\\b/i');
-    if (submitBtn) {
-      console.log(`[autofill:${sessionId}] Found Submit button — last page reached.`);
-      break;
-    }
-
-    // --- 2️⃣ Detect Next/Continue button robustly ---
-    let nextBtn = await page.$('text=/\\b(Next|Continue)\\b/i');
-
-    // Fallback: find button manually if above fails
-    if (!nextBtn) {
-      const nextSelector = await page.evaluateHandle(() => {
-        const buttons = Array.from(document.querySelectorAll('div[role="button"], button, span'))
-          .filter(el => el.innerText && /(next|continue)/i.test(el.innerText))
-          .filter(el => {
-            const rect = el.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
-          });
-        return buttons[0] || null;
-      });
-      if (nextSelector) nextBtn = nextSelector.asElement();
-    }
-
-    if (!nextBtn) {
-      console.log(`[autofill:${sessionId}] ❌ No Next or Submit button found — stopping.`);
-      break;
-    }
-
-    console.log(`[autofill:${sessionId}] Clicking Next → moving to page ${pageIndex + 1}`);
-    await nextBtn.click({ delay: 100 }).catch(() => {});
-    
-    // --- 3️⃣ Wait for new page content to load ---
-    await page.waitForFunction(
-      () => {
-        const spinners = document.querySelectorAll('[aria-busy="true"], [data-loading="true"]');
-        return spinners.length === 0;
-      },
-      { timeout: 8000 }
-    ).catch(() => {});
-
-    // Give some breathing room for next fields
-    await page.waitForTimeout(1200);
-
-    pageIndex++;
-  }
-
-  const finalScreenshot = isClosed ? null : await safeScreenshot(page);
-
-  return {
-    sessionId,
-    screenshotBase64: finalScreenshot,
-    ...overallResults
-  };
 }
 
-
-
+/** continueAutofill(sessionId, userProfile) - called after manual Google sign-in */
 export async function continueAutofill(sessionId, userProfile) {
   const s = activeSessions.get(sessionId);
   if (!s) throw new Error('Session not found or expired');
   const { page } = s;
-  if (!page) throw new Error('Page not available');
+  if (!page) throw new Error('Page not available (it may have been closed)');
 
-  const result = await performFilling(page, userProfile, sessionId);
-  const screenshotBase64 = await safeScreenshot(page);
-  return { sessionId, screenshotBase64, ...result };
+  try {
+    // Ensure page has loaded the form (wait for presence of question containers)
+    await page.waitForSelector('div[role="listitem"], .freebirdFormviewerViewItemsItemItem, form', { timeout: 20000 }).catch(()=>{});
+    const agg = await fillAllPages(page, userProfile, sessionId, { maxPages: 20 });
+    const screenshotBase64 = await safeScreenshot(page);
+    return { sessionId, screenshotBase64, ...agg };
+  } catch (err) {
+    console.error(`[autofill:${sessionId}] continueAutofill error`, err);
+    throw new Error(`Continue autofill failed: ${err.message || err}`);
+  }
 }
 
+/**
+ * submitAutofill(sessionId)
+ * - Attempt to find a Submit button and click it, then close the context and delete the session.
+ */
 export async function submitAutofill(sessionId) {
   const s = activeSessions.get(sessionId);
   if (!s) throw new Error('Session not found or expired');
   const { page, context } = s;
   if (!page || page.isClosed?.()) { activeSessions.delete(sessionId); return { success: false, reason: 'page already closed' }; }
+
   try {
-    const xpathList = [
-      "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'submit')]",
-      "//div[@role='button' and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'submit')]"
+    // find Submit via text or button role
+    const submitSelectors = [
+      'text=/\\bSubmit\\b/i',
+      'button[type="submit"]',
+      'div[role="button"]:has-text("Submit")',
+      'button:has-text("Submit")'
     ];
     let clicked = false;
-    for (const xp of xpathList) {
-      const els = await page.$x(xp);
-      if (els && els[0]) { await els[0].click().catch(()=>{}); clicked = true; break; }
+    for (const sel of submitSelectors) {
+      const el = await page.$(sel);
+      if (el) { await el.click().catch(()=>{}); clicked = true; break; }
     }
+
+    // XPath heuristics
     if (!clicked) {
-      const btn = await page.$('button[type="submit"], button');
-      if (btn) { await btn.click().catch(()=>{}); clicked = true; }
+      const xpaths = [
+        "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'submit')]",
+        "//div[@role='button' and contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'submit')]"
+      ];
+      for (const xp of xpaths) {
+        const els = await page.$x(xp);
+        if (els && els[0]) { await els[0].click().catch(()=>{}); clicked = true; break; }
+      }
     }
-    await page.waitForTimeout(900).catch(()=>{});
+
+    await page.waitForTimeout(1200).catch(()=>{});
+    try { await page.waitForFunction(() => /formResponse/i.test(window.location.href), { timeout: 3000 }).catch(()=>{}); } catch (e) {}
+
     const after = await safeScreenshot(page);
     try { await context.close(); } catch (_) {}
     activeSessions.delete(sessionId);
@@ -660,17 +592,20 @@ export async function submitAutofill(sessionId) {
   } catch (err) {
     try { await context.close(); } catch (_) {}
     activeSessions.delete(sessionId);
-    throw err;
+    console.error(`[autofill:${sessionId}] submitAutofill error:`, err);
+    throw new Error(`Submit failed: ${err.message || err}`);
   }
 }
 
+/** Close + cleanup session */
 export async function cancelSession(sessionId) {
   const s = activeSessions.get(sessionId);
   if (!s) return { cancelled: false };
   const { context } = s;
-  try { await context.close(); } catch (_) {}
+  try { await context.close(); } catch (e) {}
   activeSessions.delete(sessionId);
   return { cancelled: true };
 }
 
+/** Backwards-compat alias if some code expects launchAndFillForm */
 export { startAutofill as launchAndFillForm };
