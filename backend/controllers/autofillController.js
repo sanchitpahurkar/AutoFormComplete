@@ -1,5 +1,5 @@
 // backend/controllers/autofillController.js
-import User from '../models/User.js';
+import User from '../models/user.js';
 import * as playwrightService from '../services/playwrightService.js';
 
 export async function start(req, res) {

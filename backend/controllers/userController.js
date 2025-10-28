@@ -1,5 +1,5 @@
 // backend/controllers/userController.js
-import User from '../models/User.js';
+import User from '../models/user.js';
 
 /**
  * Helper to safely get clerkId from request (populated by Clerk middleware)
