@@ -25,8 +25,8 @@ export const KEYWORD_MAP = {
   activeBacklogs: ['active backlogs', 'current backlogs', 'pending backlogs'],
   deadBacklogs: ['dead backlogs', 'cleared backlogs'],
   yearOfGraduation: ['graduation year', 'year of passing', 'expected graduation'],
-  branch: ['branch', 'department', 'discipline', 'major'],
-  enrollmentNumber: ['enrollment number', 'roll number'],
+  branch: ['branch', 'department', 'discipline', 'major'], 
+  enrollmentNumber: ['enrollment number', 'roll number'], 
 
   // HSC / SSC
   hscPercentage: ['hsc percentage', '12th percentage', 'intermediate percentage'],

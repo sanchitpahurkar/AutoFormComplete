@@ -120,3 +120,37 @@ export const updateUserByClerkId = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to update user' });
   }
 };
+
+export const getAllUsers = async (req, res) => {
+  try {
+    const admin = await User.findOne({ clerkId: req.auth.userId });
+    if (!admin || admin.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const users = await User.find({}, 
+      'firstName lastName branch cgpa enrollmentNumber hscPercentage sscPercentage'
+    );
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// ✅ Admin-only: Get specific student details
+export const getUserById = async (req, res) => {
+  try {
+    const admin = await User.findOne({ clerkId: req.auth.userId });
+    if (!admin || admin.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user)
+      return res.status(404).json({ success: false, message: 'User not found' });
+
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

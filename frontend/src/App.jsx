@@ -8,6 +8,8 @@ import Header from './components/Header';
 import AutoFillPage from './pages/AutoFillPage';
 import UserProfile from './pages/UserProfile';
 import { Toaster } from "react-hot-toast";
+import AdminDashboard from './pages/AdminDashboard';
+import StudentDetails from './pages/StudentDetails';
 
 function ProtectedRoute({ children }) {
   const { isSignedIn, isLoaded } = useUser();
@@ -62,6 +64,23 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/student/:id"
+        element={
+          <ProtectedRoute>
+            <StudentDetails />
+          </ProtectedRoute>
+        }
+      />
       </Routes>
     </>
   );
