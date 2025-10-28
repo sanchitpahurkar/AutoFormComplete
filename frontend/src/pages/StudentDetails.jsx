@@ -14,7 +14,7 @@ const StudentDetails = () => {
     const loadData = async () => {
       try {
         const token = await getToken();
-        const me = await axios.get(`${import.meta.env.VITE_API_URL}/users/me`, {
+        const me = await axios.get('http://localhost:5000/api/users/me', {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (me.data.user.role !== 'admin') {
@@ -24,7 +24,7 @@ const StudentDetails = () => {
         }
         setIsAdmin(true);
 
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/${id}`, {
+        const res = await axios.get(`http://localhost:5000/api/users/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setStudent(res.data.user);
