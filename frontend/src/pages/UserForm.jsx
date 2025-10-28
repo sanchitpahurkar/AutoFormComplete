@@ -97,7 +97,7 @@ export default function UserForm() {
     const fetchUser = async () => {
       const token = await getToken();
       try {
-        const res = await axios.get("http://localhost:5000/api/users/me", {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if(res.data.success) {
@@ -224,13 +224,13 @@ export default function UserForm() {
 
       let res;
       if(existingUser) {
-        res = await axios.put("http://localhost:5000/api/users/me", userPayload, {
+        res = await axios.put(`${import.meta.env.VITE_API_URL}/users/me`, userPayload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         toast.success("Details updated successfully");
       } else {
         // new submission flow
-        res = await axios.post("http://localhost:5000/api/users", userPayload, {
+        res = await axios.post(`${import.meta.env.VITE_API_URL}/users`, userPayload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         toast.success("Details submitted successfully");
