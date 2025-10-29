@@ -26,13 +26,13 @@ const AdminDashboard = () => {
     const verifyAdmin = async () => {
       try {
         const token = await getToken();
-        const res = await axios.get("http://localhost:5000/api/users/me", {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (res.data.user.role === "admin") {
           setIsAdmin(true);
-          const all = await axios.get("http://localhost:5000/api/users/all", {
+          const all = await axios.get(`${import.meta.env.VITE_API_URL}/users/all`, {
             headers: { Authorization: `Bearer ${token}` },
           });
 
