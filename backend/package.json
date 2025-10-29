@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon server.js",
-    "postinstall": "npx playwright install chromium"
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
