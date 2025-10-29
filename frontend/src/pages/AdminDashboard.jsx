@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { API_URL } from "../services/api";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -26,13 +27,13 @@ const AdminDashboard = () => {
     const verifyAdmin = async () => {
       try {
         const token = await getToken();
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/me`, {
+        const res = await axios.get(`${API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (res.data.user.role === "admin") {
           setIsAdmin(true);
-          const all = await axios.get(`${import.meta.env.VITE_API_URL}/users/all`, {
+          const all = await axios.get(`${API_URL}/users/all`, {
             headers: { Authorization: `Bearer ${token}` },
           });
 

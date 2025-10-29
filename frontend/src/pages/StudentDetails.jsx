@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL } from '../services/api';
 
 const StudentDetails = () => {
   const { id } = useParams();
@@ -14,7 +15,7 @@ const StudentDetails = () => {
     const loadData = async () => {
       try {
         const token = await getToken();
-        const me = await axios.get(`${import.meta.env.VITE_API_URL}/users/me`, {
+        const me = await axios.get(`${API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (me.data.user.role !== 'admin') {
@@ -24,7 +25,7 @@ const StudentDetails = () => {
         }
         setIsAdmin(true);
 
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/${id}`, {
+        const res = await axios.get(`${API_URL}/users/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setStudent(res.data.user);

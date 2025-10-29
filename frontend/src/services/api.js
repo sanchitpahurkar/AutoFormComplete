@@ -2,7 +2,9 @@
 import axios from 'axios';
 import { useAuth } from '@clerk/clerk-react';
 
-const API_URL = `${import.meta.env.VITE_API_URL}`;
+// Provide a build-time env var and a safe fallback so a missing VITE_API_URL
+// during deployment doesn't cause the app to call localhost unexpectedly.
+export const API_URL = import.meta.env.VITE_API_URL || 'https://autoformcomplete-1.onrender.com/api';
 
 export function useApi() {
   const { getToken } = useAuth();
@@ -11,7 +13,7 @@ export function useApi() {
     const token = await getToken();
     return axios({
       method,
-      url: `${API_URL}${url}`,
+  url: `${API_URL}${url}`,
       data,
       headers: {
         'Content-Type': 'application/json',

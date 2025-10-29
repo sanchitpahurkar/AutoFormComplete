@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "@clerk/clerk-react";
+import { API_URL } from "../services/api";
 import toast from "react-hot-toast";
 
 export default function UserForm() {
@@ -97,7 +98,7 @@ export default function UserForm() {
     const fetchUser = async () => {
       const token = await getToken();
       try {
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/users/me`, {
+        const res = await axios.get(`${API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if(res.data.success) {
@@ -224,13 +225,13 @@ export default function UserForm() {
 
       let res;
       if(existingUser) {
-        res = await axios.put(`${import.meta.env.VITE_API_URL}/users/me`, userPayload, {
+        res = await axios.put(`${API_URL}/users/me`, userPayload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         toast.success("Details updated successfully");
       } else {
         // new submission flow
-        res = await axios.post(`${import.meta.env.VITE_API_URL}/users`, userPayload, {
+        res = await axios.post(`${API_URL}/users`, userPayload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         toast.success("Details submitted successfully");
